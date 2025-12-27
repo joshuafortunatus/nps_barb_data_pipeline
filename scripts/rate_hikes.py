@@ -29,7 +29,7 @@ def rate_hike_with_retry(hike, max_retries=3, base_delay=5):
     
     full_description = "\n\n".join(description_parts) if description_parts else "No description available"
     
-    prompt = f"""Rate this hike as Easy, Moderate, or Difficult based on the description.
+    prompt = f"""Rate this hike as Easy, Moderate, or Strenuous based on the description.
 
 Title: {hike['hike_title']}
 
@@ -37,7 +37,7 @@ Title: {hike['hike_title']}
 
 URL: {hike['activity_url']}
 
-Respond with ONLY one word: Easy, Moderate, or Difficult."""
+Respond with ONLY one word: Easy, Moderate, or Strenuous."""
     
     for attempt in range(max_retries):
         try:
@@ -53,7 +53,7 @@ Respond with ONLY one word: Easy, Moderate, or Difficult."""
             rating = response.content[0].text.strip()
             
             # Validate rating
-            if rating not in ['Easy', 'Moderate', 'Difficult']:
+            if rating not in ['Easy', 'Moderate', 'Strenuous']:
                 print(f"⚠️  Unexpected rating '{rating}' for {hike['hike_title']}, defaulting to Moderate")
                 rating = 'Moderate'
             
@@ -77,7 +77,7 @@ SELECT
     short_description,
     long_description,
     activity_url
-FROM `{PROJECT_ID}.{DATASET_ID}.nps__national_park_hikes`
+FROM `{PROJECT_ID}.{DATASET_ID}.nps__int_activity_hikes`
 WHERE hike_id NOT IN (
     SELECT activity_id 
     FROM `{PROJECT_ID}.{DATASET_ID}.nps__mart_activity_difficulty_ratings`
