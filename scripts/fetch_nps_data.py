@@ -132,7 +132,8 @@ def fetch_park_specific_data(endpoint_name, endpoint_path_template):
         try:
             with urllib.request.urlopen(req) as response:
                 data = json.loads(response.read())
-                items = data.get('data', [])
+                # Park boundaries returns GeoJSON with 'features' instead of 'data'
+                items = data.get('features', data.get('data', []))
                 
                 if items:
                     # Add park code to each record for reference
