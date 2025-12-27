@@ -176,6 +176,12 @@ def load_to_bigquery(data, table_name):
             print(f"Warning: Skipping non-dict record at index {i} in {table_name}: {type(record)}")
             continue
         
+        # Special handling for park_boundaries - convert geometry to WKT string
+        if table_name == 'nps__src_park_boundaries' and 'geometry' in record:
+            # Store geometry as JSON string for now
+            record['geometry_json'] = json.dumps(record['geometry'])
+            del record['geometry']
+        
         record['_loaded_at'] = load_timestamp
         processed_data.append(record)
     
