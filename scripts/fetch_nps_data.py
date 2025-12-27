@@ -36,7 +36,12 @@ ENDPOINTS = {
     'thingstodo': '/thingstodo',
     'events': '/events',
     'places': '/places',
-    'alerts': '/alerts'
+    'alerts': '/alerts',
+}
+
+# Endpoints that require individual park code calls
+PARK_SPECIFIC_ENDPOINTS = {
+    'park_boundaries': '/mapdata/parkboundaries/{parkCode}'
 }
 
 # Special case mappings for table names that don't follow the pattern
@@ -112,6 +117,39 @@ def fetch_endpoint_data(endpoint_name, endpoint_path):
     print(f"Total {endpoint_name}: {len(all_data)}")
     return all_data
 
+def fetch_park_specific_data(endpoint_name, endpoint_path_template):
+    """Fetch data for endpoints that require individual park code calls"""
+    print(f"\n=== Fetching {endpoint_name} for each park ===")
+    
+    all_data = []
+    
+    for park_code in NATIONAL_PARK_CODES:
+        endpoint_path = endpoint_path_template.format(parkCode=park_code)
+        url = f"{BASE_URL}{endpoint_path}"
+        
+        req = urllib.request.Request(url, headers={"X-Api-Key": NPS_KEY})
+        
+        try:
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read())
+                items = data.get('data', [])
+                
+                if items:
+                    # Add park code to each record for reference
+                    for item in items:
+                        item['_park_code'] = park_code
+                    all_data.extend(items)
+                    print(f"Fetched {len(items)} boundaries for {park_code}")
+                else:
+                    print(f"No boundaries for {park_code}")
+                    
+        except Exception as e:
+            print(f"Error fetching {endpoint_name} for {park_code}: {e}")
+            continue
+    
+    print(f"Total {endpoint_name}: {len(all_data)}")
+    return all_data
+
 def load_to_bigquery(data, table_name):
     """Load JSON data to BigQuery table with native types preserved"""
     if not data:
@@ -162,8 +200,15 @@ def main():
     print("Starting NPS data fetch...")
     print(f"Target: {PROJECT_ID}.{DATASET_ID}")
     
+    # Fetch standard endpoints
     for endpoint_name, endpoint_path in ENDPOINTS.items():
         data = fetch_endpoint_data(endpoint_name, endpoint_path)
+        table_name = get_table_name(endpoint_name)
+        load_to_bigquery(data, table_name)
+    
+    # Fetch park-specific endpoints
+    for endpoint_name, endpoint_path_template in PARK_SPECIFIC_ENDPOINTS.items():
+        data = fetch_park_specific_data(endpoint_name, endpoint_path_template)
         table_name = get_table_name(endpoint_name)
         load_to_bigquery(data, table_name)
     
