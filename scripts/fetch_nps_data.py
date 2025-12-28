@@ -16,16 +16,13 @@ credentials_json = json.loads(os.environ['GOOGLE_CREDENTIALS_JSON'])
 credentials = service_account.Credentials.from_service_account_info(credentials_json)
 client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
-# National park codes - sorted alphabetically
-NATIONAL_PARK_CODES = [
-    'acad', 'arch', 'badl', 'bibe', 'bisc', 'blca', 'brca', 'cany', 'care', 'cave',
-    'chis', 'cong', 'crla', 'cuva', 'dena', 'drto', 'deva', 'ever', 'gaar', 'gate',
-    'glac', 'glba', 'grba', 'grca', 'grsa', 'grte', 'grsm', 'gumo', 'hale', 'havo',
-    'hosp', 'indu', 'isro', 'jotr', 'katm', 'kefj', 'kica', 'kova', 'lacl', 'lavo',
-    'maca', 'meve', 'mora', 'neri', 'npsa', 'olym', 'pefo', 'pinn', 'redw', 'romo',
-    'sagu', 'seki', 'shen', 'thro', 'viis', 'voya', 'whsa', 'wica', 'wrst', 'yell',
-    'yose', 'zion'
-]
+def get_national_park_codes():
+    """Fetch national park codes from BigQuery"""
+    query = "SELECT DISTINCT park_code FROM `personal-jtf.all_data.nps__int_national_parks`"
+    result = client.query(query).result()
+    park_codes = [row.park_code for row in result]
+    print(f"Loaded {len(park_codes)} national park codes from BigQuery")
+    return park_codes
 
 # Define endpoints - table names follow pattern: nps_src_{key}
 ENDPOINTS = {
@@ -55,7 +52,7 @@ def get_table_name(endpoint_key):
         return TABLE_NAME_OVERRIDES[endpoint_key]
     return f'nps__src_{endpoint_key}'
 
-def fetch_endpoint_data(endpoint_name, endpoint_path):
+def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     """Fetch all data from an NPS API endpoint with pagination"""
     print(f"\n=== Fetching {endpoint_name} ===")
     
@@ -68,7 +65,7 @@ def fetch_endpoint_data(endpoint_name, endpoint_path):
     today = date.today().isoformat()
     
     # Create comma-separated park codes for events and places endpoints
-    park_codes_param = ','.join(NATIONAL_PARK_CODES)
+    park_codes_param = ','.join(park_codes)
     
     while True:
         # Build URL with special handling for events and places endpoints
@@ -117,13 +114,13 @@ def fetch_endpoint_data(endpoint_name, endpoint_path):
     print(f"Total {endpoint_name}: {len(all_data)}")
     return all_data
 
-def fetch_park_specific_data(endpoint_name, endpoint_path_template):
+def fetch_park_specific_data(endpoint_name, endpoint_path_template, park_codes):
     """Fetch data for endpoints that require individual park code calls"""
     print(f"\n=== Fetching {endpoint_name} for each park ===")
     
     all_data = []
     
-    for park_code in NATIONAL_PARK_CODES:
+    for park_code in park_codes:
         endpoint_path = endpoint_path_template.format(parkCode=park_code)
         url = f"{BASE_URL}{endpoint_path}"
         
@@ -207,15 +204,18 @@ def main():
     print("Starting NPS data fetch...")
     print(f"Target: {PROJECT_ID}.{DATASET_ID}")
     
+    # Get national park codes from BigQuery
+    park_codes = get_national_park_codes()
+    
     # Fetch standard endpoints
     for endpoint_name, endpoint_path in ENDPOINTS.items():
-        data = fetch_endpoint_data(endpoint_name, endpoint_path)
+        data = fetch_endpoint_data(endpoint_name, endpoint_path, park_codes)
         table_name = get_table_name(endpoint_name)
         load_to_bigquery(data, table_name)
     
     # Fetch park-specific endpoints
     for endpoint_name, endpoint_path_template in PARK_SPECIFIC_ENDPOINTS.items():
-        data = fetch_park_specific_data(endpoint_name, endpoint_path_template)
+        data = fetch_park_specific_data(endpoint_name, endpoint_path_template, park_codes)
         table_name = get_table_name(endpoint_name)
         load_to_bigquery(data, table_name)
     
