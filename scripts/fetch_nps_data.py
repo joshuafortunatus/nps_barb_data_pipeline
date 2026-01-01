@@ -34,6 +34,7 @@ ENDPOINTS = {
     'events': '/events',
     'places': '/places',
     'alerts': '/alerts',
+    'campgrounds': '/campgrounds',
 }
 
 # Endpoints that require individual park code calls
