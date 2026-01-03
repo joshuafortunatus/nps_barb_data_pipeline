@@ -42,7 +42,7 @@ Respond with ONLY one word: Easy, Moderate, or Strenuous."""
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
                 max_tokens=100,
                 messages=[{
                     "role": "user",
