@@ -18,7 +18,7 @@ client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
 def get_national_park_codes():
     """Fetch national park codes from BigQuery"""
-    query = "SELECT DISTINCT park_code FROM `personal-jtf.all_data.nps__int_national_parks`"
+    query = os.environ['NATIONAL_PARK_CODES_QUERY']
     result = client.query(query).result()
     park_codes = [row.park_code for row in result]
     print(f"Loaded {len(park_codes)} national park codes from BigQuery")
