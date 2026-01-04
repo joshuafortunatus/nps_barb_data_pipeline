@@ -18,7 +18,7 @@ client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
 def get_national_park_codes():
     """Fetch national park codes from BigQuery"""
-    query = os.environ['NATIONAL_PARK_CODES_QUERY']
+    query = os.environ['GET_NATIONAL_PARKS_QUERY']
     result = client.query(query).result()
     park_codes = [row.park_code for row in result]
     print(f"Loaded {len(park_codes)} national park codes from BigQuery")
