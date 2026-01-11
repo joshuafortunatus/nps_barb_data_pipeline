@@ -12,8 +12,8 @@ DATASET_ID = os.environ['DATASET_ID']
 BASE_URL = "https://ridb.recreation.gov/api/v1"
 
 # Set up BigQuery client
-credentials_file = os.environ['GOOGLE_CREDENTIALS_JSON']
-credentials = service_account.Credentials.from_service_account_file(credentials_file)
+credentials_json = json.loads(os.environ['GOOGLE_CREDENTIALS_JSON'])
+credentials = service_account.Credentials.from_service_account_info(credentials_json)
 client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
 def fetch_all_facilities():
@@ -92,13 +92,13 @@ def fetch_all_campsites():
     """Fetch all campsites from all facilities"""
     print("\n=== Fetching all campsites from all facilities ===")
     
-    # First, get all facilities
+    # Get all facilities
     facilities = fetch_all_facilities()
     
     all_campsites = []
     facilities_with_campsites = 0
     
-    # Then, fetch campsites for each facility
+    # Fetch campsites for each facility
     for i, facility in enumerate(facilities, 1):
         facility_id = facility.get('FacilityID')
         facility_name = facility.get('FacilityName', 'Unknown')
