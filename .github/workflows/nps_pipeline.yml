@@ -2,7 +2,7 @@ name: NPS Data Pipeline
 
 on:
   schedule:
-    - cron: '0 8 * * *' 
+    - cron: '0 8 * * *'  # Daily at 8am UTC
   workflow_dispatch:
 
 jobs:
@@ -29,6 +29,14 @@ jobs:
         GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         GET_NATIONAL_PARKS_QUERY: ${{ secrets.GET_NATIONAL_PARKS_QUERY }}
       run: python scripts/fetch_nps_data.py
+    
+    - name: Fetch Recreation.gov data and load to BigQuery
+      env:
+        RECREATION_GOV_API_KEY: ${{ secrets.RECREATION_GOV_API_KEY }}
+        PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        DATASET_ID: ${{ secrets.DATASET_ID }}
+        GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      run: python scripts/fetch_recreation_gov_data.py
     
     - name: Rate new hikes
       env:
