@@ -1,4 +1,4 @@
-import urllib.request
+import requests
 import json
 import os
 from datetime import datetime, date
@@ -68,6 +68,8 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     # Create comma-separated park codes for events and places endpoints
     park_codes_param = ','.join(park_codes)
     
+    headers = {"X-Api-Key": NPS_KEY}  # CHANGED: moved outside loop
+    
     while True:
         # Build URL with special handling for events and places endpoints
         if endpoint_name == 'events':
@@ -77,11 +79,11 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
         else:
             url = f"{BASE_URL}{endpoint_path}?start={start}&limit={limit}"
         
-        req = urllib.request.Request(url, headers={"X-Api-Key": NPS_KEY})
-        
+        # CHANGED: replaced urllib with requests
         try:
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read())
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
         except Exception as e:
             print(f"Error fetching {endpoint_name}: {e}")
             break
@@ -120,28 +122,29 @@ def fetch_park_specific_data(endpoint_name, endpoint_path_template, park_codes):
     print(f"\n=== Fetching {endpoint_name} for each park ===")
     
     all_data = []
+    headers = {"X-Api-Key": NPS_KEY}  # CHANGED: moved outside loop
     
     for park_code in park_codes:
         endpoint_path = endpoint_path_template.format(parkCode=park_code)
         url = f"{BASE_URL}{endpoint_path}"
         
-        req = urllib.request.Request(url, headers={"X-Api-Key": NPS_KEY})
-        
+        # CHANGED: replaced urllib with requests
         try:
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read())
-                # Park boundaries returns GeoJSON with 'features' instead of 'data'
-                items = data.get('features', data.get('data', []))
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            # Park boundaries returns GeoJSON with 'features' instead of 'data'
+            items = data.get('features', data.get('data', []))
+            
+            if items:
+                # Add park code to each record for reference
+                for item in items:
+                    item['_park_code'] = park_code
+                all_data.extend(items)
+                print(f"Fetched {len(items)} boundaries for {park_code}")
+            else:
+                print(f"No boundaries for {park_code}")
                 
-                if items:
-                    # Add park code to each record for reference
-                    for item in items:
-                        item['_park_code'] = park_code
-                    all_data.extend(items)
-                    print(f"Fetched {len(items)} boundaries for {park_code}")
-                else:
-                    print(f"No boundaries for {park_code}")
-                    
         except Exception as e:
             print(f"Error fetching {endpoint_name} for {park_code}: {e}")
             continue
