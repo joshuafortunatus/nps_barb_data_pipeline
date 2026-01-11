@@ -11,51 +11,19 @@ PROJECT_ID = os.environ['PROJECT_ID']
 DATASET_ID = os.environ['DATASET_ID']
 BASE_URL = "https://ridb.recreation.gov/api/v1"
 
+# Voyageurs National Park facility ID
+# Only national park that doesn't have campground data through NPS API
+VOYAGEURS_FACILITY_ID = '249981'
+
 # Set up BigQuery client
 credentials_json = json.loads(os.environ['GOOGLE_CREDENTIALS_JSON'])
 credentials = service_account.Credentials.from_service_account_info(credentials_json)
 client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
-def fetch_all_facilities():
-    """Fetch all facility IDs that have campsites"""
-    print("\n=== Fetching all facilities ===")
+def fetch_campsites(facility_id):
+    """Fetch all campsites for a facility with pagination"""
+    print(f"\n=== Fetching campsites for facility {facility_id} ===")
     
-    all_facilities = []
-    offset = 0
-    limit = 50
-    
-    headers = {"apikey": RECREATION_GOV_API_KEY}
-    
-    while True:
-        url = f"{BASE_URL}/facilities"
-        params = {'limit': limit, 'offset': offset}
-        
-        try:
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as e:
-            print(f"Error fetching facilities: {e}")
-            break
-        
-        facilities = data.get('RECDATA', [])
-        
-        if not facilities:
-            break
-        
-        all_facilities.extend(facilities)
-        print(f"Fetched {len(all_facilities)} facilities so far...")
-        
-        if len(facilities) < limit:
-            break
-        
-        offset += limit
-    
-    print(f"Total facilities: {len(all_facilities)}")
-    return all_facilities
-
-def fetch_campsites_for_facility(facility_id):
-    """Fetch all campsites for a specific facility"""
     all_campsites = []
     offset = 0
     limit = 50
@@ -71,7 +39,7 @@ def fetch_campsites_for_facility(facility_id):
             response.raise_for_status()
             data = response.json()
         except Exception as e:
-            # Some facilities don't have campsites - that's ok
+            print(f"Error fetching campsites: {e}")
             break
         
         campsites = data.get('RECDATA', [])
@@ -80,50 +48,14 @@ def fetch_campsites_for_facility(facility_id):
             break
         
         all_campsites.extend(campsites)
+        print(f"Fetched {len(all_campsites)} campsites so far...")
         
         if len(campsites) < limit:
             break
         
         offset += limit
     
-    return all_campsites
-
-def fetch_all_campsites():
-    """Fetch all campsites from all facilities"""
-    print("\n=== Fetching all campsites from all facilities ===")
-    
-    # Get all facilities
-    facilities = fetch_all_facilities()
-    
-    all_campsites = []
-    facilities_with_campsites = 0
-    
-    # Fetch campsites for each facility
-    for i, facility in enumerate(facilities, 1):
-        facility_id = facility.get('FacilityID')
-        facility_name = facility.get('FacilityName', 'Unknown')
-        
-        print(f"\n[{i}/{len(facilities)}] Fetching campsites for: {facility_name} (ID: {facility_id})")
-        
-        campsites = fetch_campsites_for_facility(facility_id)
-        
-        if campsites:
-            # Add facility metadata to each campsite
-            for campsite in campsites:
-                campsite['_facility_id'] = facility_id
-                campsite['_facility_name'] = facility_name
-            
-            all_campsites.extend(campsites)
-            facilities_with_campsites += 1
-            print(f"  ✓ Found {len(campsites)} campsites | Total so far: {len(all_campsites)}")
-        else:
-            print(f"  - No campsites")
-    
-    print(f"\n=== Summary ===")
-    print(f"Total facilities: {len(facilities)}")
-    print(f"Facilities with campsites: {facilities_with_campsites}")
     print(f"Total campsites: {len(all_campsites)}")
-    
     return all_campsites
 
 def load_to_bigquery(data, table_name):
@@ -144,6 +76,7 @@ def load_to_bigquery(data, table_name):
             continue
         
         record['_loaded_at'] = load_timestamp
+        record['_facility_id'] = VOYAGEURS_FACILITY_ID
         processed_data.append(record)
     
     if not processed_data:
@@ -168,8 +101,8 @@ def main():
     print("Starting Recreation.gov data fetch...")
     print(f"Target: {PROJECT_ID}.{DATASET_ID}")
     
-    # Fetch all campsites from all facilities
-    campsites = fetch_all_campsites()
+    # Fetch Voyageurs campsites
+    campsites = fetch_campsites(VOYAGEURS_FACILITY_ID)
     
     # Load to BigQuery
     load_to_bigquery(campsites, 'recreation_gov__src_campsites')

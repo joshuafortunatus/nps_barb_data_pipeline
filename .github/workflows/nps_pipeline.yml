@@ -2,12 +2,11 @@ name: NPS Data Pipeline
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Daily at 8am UTC - NPS data
-    - cron: '0 8 * * 0'  # Weekly on Sundays at 8am UTC - Recreation.gov data
+    - cron: '0 8 * * *'  # Daily at 8am UTC
   workflow_dispatch:
 
 jobs:
-  fetch-and-load-nps:
+  fetch-and-load:
     runs-on: ubuntu-latest
     
     steps:
@@ -31,30 +30,6 @@ jobs:
         GET_NATIONAL_PARKS_QUERY: ${{ secrets.GET_NATIONAL_PARKS_QUERY }}
       run: python scripts/fetch_nps_data.py
     
-    - name: Rate new hikes
-      env:
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        PROJECT_ID: ${{ secrets.PROJECT_ID }}
-        DATASET_ID: ${{ secrets.DATASET_ID }}
-        GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-      run: python scripts/rate_hikes.py
-
-  fetch-and-load-recreation-gov:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 9 * * 0' || github.event_name == 'workflow_dispatch'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: pip install -r requirements.txt
-    
     - name: Fetch Recreation.gov data and load to BigQuery
       env:
         RECREATION_GOV_API_KEY: ${{ secrets.RECREATION_GOV_API_KEY }}
@@ -62,3 +37,11 @@ jobs:
         DATASET_ID: ${{ secrets.DATASET_ID }}
         GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
       run: python scripts/fetch_recreation_gov_data.py
+    
+    - name: Rate new hikes
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        DATASET_ID: ${{ secrets.DATASET_ID }}
+        GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      run: python scripts/rate_hikes.py
