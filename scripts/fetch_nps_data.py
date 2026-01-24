@@ -12,6 +12,20 @@ PROJECT_ID = os.environ['PROJECT_ID']
 DATASET_ID = os.environ['DATASET_ID']
 BASE_URL = "https://developer.nps.gov/api/v1"
 
+# Expected minimum counts (80% threshold for safety)
+EXPECTED_COUNTS = {
+    'nps__src_parks': 474,
+    'nps__src_amenities': 127,
+    'nps__src_amenities_parks': 127,
+    'nps__src_tours': 706,
+    'nps__src_things_to_do': 3579,
+    'nps__src_events': 10,  # Lower threshold since events fluctuate
+    'nps__src_places': 5378,
+    'nps__src_alerts': 100,  # Alerts fluctuate
+    'nps__src_campgrounds': 664,
+    'nps__src_park_boundaries': 62,
+}
+
 # Set up BigQuery client
 credentials_json = json.loads(os.environ['GOOGLE_CREDENTIALS_JSON'])
 credentials = service_account.Credentials.from_service_account_info(credentials_json)
@@ -59,6 +73,14 @@ def fetch_with_retry(url, headers, max_retries=3, timeout=60):
     for attempt in range(max_retries):
         try:
             response = requests.get(url, headers=headers, timeout=timeout)
+            
+            # Handle rate limiting separately
+            if response.status_code == 429:
+                wait = 60
+                print(f"  Rate limited (429). Waiting {wait}s...")
+                time.sleep(wait)
+                continue
+            
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout:
@@ -69,11 +91,11 @@ def fetch_with_retry(url, headers, max_retries=3, timeout=60):
             print(f"  JSON decode error on attempt {attempt + 1}/{max_retries}: {e}")
         
         if attempt < max_retries - 1:
-            wait = 10 * (attempt + 1)  # 10s, 20s, 30s
+            wait = 10 * (attempt + 1)
             print(f"  Retrying in {wait}s...")
             time.sleep(wait)
     
-    return None  # All retries failed
+    return None
 
 def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     """Fetch all data from an NPS API endpoint with pagination"""
@@ -84,16 +106,11 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     start = 0
     limit = 50
     
-    # Get today's date for events endpoint
     today = date.today().isoformat()
-    
-    # Create comma-separated park codes for events and places endpoints
     park_codes_param = ','.join(park_codes)
-    
     headers = {"X-Api-Key": NPS_KEY}
     
     while True:
-        # Build URL with special handling for events and places endpoints
         if endpoint_name == 'events':
             url = f"{BASE_URL}{endpoint_path}?parkCode={park_codes_param}&dateEnd={today}&start={start}&limit={limit}"
         elif endpoint_name == 'places':
@@ -112,7 +129,6 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
         if not items:
             break
         
-        # For events endpoint, deduplicate
         if endpoint_name == 'events':
             new_count = 0
             for item in items:
@@ -124,7 +140,6 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
             
             print(f"Fetched {len(items)} events, {new_count} new | Total unique: {len(all_data)}")
             
-            # If no new events, stop
             if new_count == 0:
                 break
         else:
@@ -132,6 +147,7 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
             print(f"Fetched {len(all_data)} {endpoint_name} so far...")
         
         start += limit
+        time.sleep(0.5)
     
     print(f"Total {endpoint_name}: {len(all_data)}")
     return all_data
@@ -153,35 +169,39 @@ def fetch_park_specific_data(endpoint_name, endpoint_path_template, park_codes):
             print(f"Failed to fetch {endpoint_name} for {park_code} after retries, skipping")
             continue
             
-        # Park boundaries returns GeoJSON with 'features' instead of 'data'
         items = data.get('features', data.get('data', []))
         
         if items:
-            # Add park code to each record for reference
             for item in items:
                 item['_park_code'] = park_code
             all_data.extend(items)
             print(f"Fetched {len(items)} boundaries for {park_code}")
         else:
             print(f"No boundaries for {park_code}")
+        
+        time.sleep(1)
     
     print(f"Total {endpoint_name}: {len(all_data)}")
     return all_data
 
 def load_to_bigquery(data, table_name):
-    """Load JSON data to BigQuery table with native types preserved"""
+    """Load JSON data to BigQuery table with safety check"""
     if not data:
-        print(f"No data to load for {table_name}")
+        print(f"No data to load for {table_name}, keeping existing data")
+        return
+    
+    # Safety check - don't overwrite if we got way less than expected
+    expected = EXPECTED_COUNTS.get(table_name)
+    if expected and len(data) < expected * 0.8:
+        print(f"WARNING: Only got {len(data)} {table_name}, expected ~{expected}. Skipping write to preserve existing data.")
         return
     
     print(f"Loading {len(data)} items to {table_name}")
     
-    # Add metadata column
     load_timestamp = datetime.utcnow().isoformat()
     processed_data = []
     
     for i, record in enumerate(data):
-        # Special handling for amenities_parks - unwrap single-element lists
         if table_name == 'nps__src_amenities_parks' and isinstance(record, list):
             if len(record) == 1 and isinstance(record[0], dict):
                 record = record[0]
@@ -193,9 +213,7 @@ def load_to_bigquery(data, table_name):
             print(f"Warning: Skipping non-dict record at index {i} in {table_name}: {type(record)}")
             continue
         
-        # Special handling for park_boundaries - convert geometry to WKT string
         if table_name == 'nps__src_park_boundaries' and 'geometry' in record:
-            # Store geometry as JSON string for now
             record['geometry_json'] = json.dumps(record['geometry'])
             del record['geometry']
         
@@ -224,16 +242,13 @@ def main():
     print("Starting NPS data fetch...")
     print(f"Target: {PROJECT_ID}.{DATASET_ID}")
     
-    # Get national park codes from BigQuery
     park_codes = get_national_park_codes()
     
-    # Fetch standard endpoints
     for endpoint_name, endpoint_path in ENDPOINTS.items():
         data = fetch_endpoint_data(endpoint_name, endpoint_path, park_codes)
         table_name = get_table_name(endpoint_name)
         load_to_bigquery(data, table_name)
     
-    # Fetch park-specific endpoints
     for endpoint_name, endpoint_path_template in PARK_SPECIFIC_ENDPOINTS.items():
         data = fetch_park_specific_data(endpoint_name, endpoint_path_template, park_codes)
         table_name = get_table_name(endpoint_name)
