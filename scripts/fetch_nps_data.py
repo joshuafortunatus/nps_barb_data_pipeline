@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import time
 from datetime import datetime, date
 from google.cloud import bigquery
 from google.oauth2 import service_account
@@ -53,6 +54,27 @@ def get_table_name(endpoint_key):
         return TABLE_NAME_OVERRIDES[endpoint_key]
     return f'nps__src_{endpoint_key}'
 
+def fetch_with_retry(url, headers, max_retries=3, timeout=60):
+    """Fetch URL with retry logic and timeout"""
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout:
+            print(f"  Timeout on attempt {attempt + 1}/{max_retries}")
+        except requests.exceptions.RequestException as e:
+            print(f"  Request error on attempt {attempt + 1}/{max_retries}: {e}")
+        except json.JSONDecodeError as e:
+            print(f"  JSON decode error on attempt {attempt + 1}/{max_retries}: {e}")
+        
+        if attempt < max_retries - 1:
+            wait = 10 * (attempt + 1)  # 10s, 20s, 30s
+            print(f"  Retrying in {wait}s...")
+            time.sleep(wait)
+    
+    return None  # All retries failed
+
 def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     """Fetch all data from an NPS API endpoint with pagination"""
     print(f"\n=== Fetching {endpoint_name} ===")
@@ -68,7 +90,7 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     # Create comma-separated park codes for events and places endpoints
     park_codes_param = ','.join(park_codes)
     
-    headers = {"X-Api-Key": NPS_KEY}  # CHANGED: moved outside loop
+    headers = {"X-Api-Key": NPS_KEY}
     
     while True:
         # Build URL with special handling for events and places endpoints
@@ -79,13 +101,10 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
         else:
             url = f"{BASE_URL}{endpoint_path}?start={start}&limit={limit}"
         
-        # CHANGED: replaced urllib with requests
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as e:
-            print(f"Error fetching {endpoint_name}: {e}")
+        data = fetch_with_retry(url, headers)
+        
+        if data is None:
+            print(f"Failed to fetch {endpoint_name} after retries, stopping pagination")
             break
         
         items = data.get('data', [])
@@ -122,32 +141,29 @@ def fetch_park_specific_data(endpoint_name, endpoint_path_template, park_codes):
     print(f"\n=== Fetching {endpoint_name} for each park ===")
     
     all_data = []
-    headers = {"X-Api-Key": NPS_KEY}  # CHANGED: moved outside loop
+    headers = {"X-Api-Key": NPS_KEY}
     
     for park_code in park_codes:
         endpoint_path = endpoint_path_template.format(parkCode=park_code)
         url = f"{BASE_URL}{endpoint_path}"
         
-        # CHANGED: replaced urllib with requests
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            # Park boundaries returns GeoJSON with 'features' instead of 'data'
-            items = data.get('features', data.get('data', []))
-            
-            if items:
-                # Add park code to each record for reference
-                for item in items:
-                    item['_park_code'] = park_code
-                all_data.extend(items)
-                print(f"Fetched {len(items)} boundaries for {park_code}")
-            else:
-                print(f"No boundaries for {park_code}")
-                
-        except Exception as e:
-            print(f"Error fetching {endpoint_name} for {park_code}: {e}")
+        data = fetch_with_retry(url, headers)
+        
+        if data is None:
+            print(f"Failed to fetch {endpoint_name} for {park_code} after retries, skipping")
             continue
+            
+        # Park boundaries returns GeoJSON with 'features' instead of 'data'
+        items = data.get('features', data.get('data', []))
+        
+        if items:
+            # Add park code to each record for reference
+            for item in items:
+                item['_park_code'] = park_code
+            all_data.extend(items)
+            print(f"Fetched {len(items)} boundaries for {park_code}")
+        else:
+            print(f"No boundaries for {park_code}")
     
     print(f"Total {endpoint_name}: {len(all_data)}")
     return all_data
