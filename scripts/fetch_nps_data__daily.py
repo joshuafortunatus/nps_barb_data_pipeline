@@ -96,7 +96,8 @@ def fetch_events(park_codes):
         
         print(f"Fetched {len(items)} events, {new_count} new | Total unique: {len(all_data)}")
         
-        if new_count == 0:
+        # Keep paginating until we get fewer than limit (last page)
+        if len(items) < limit:
             break
         
         start += limit
