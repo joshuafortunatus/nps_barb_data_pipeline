@@ -65,7 +65,7 @@ def fetch_events(park_codes):
     
     all_data = []
     seen_ids = set()
-    start = 0
+    page = 1
     limit = 50
     
     today = date.today().isoformat()
@@ -73,7 +73,7 @@ def fetch_events(park_codes):
     headers = {"X-Api-Key": NPS_KEY}
     
     while True:
-        url = f"{BASE_URL}/events?parkCode={park_codes_param}&dateEnd={today}&start={start}&limit={limit}"
+        url = f"{BASE_URL}/events?parkCode={park_codes_param}&dateStart={today}&pageNumber={page}&limit={limit}"
         
         data = fetch_with_retry(url, headers)
         
@@ -94,12 +94,12 @@ def fetch_events(park_codes):
                 all_data.append(item)
                 new_count += 1
         
-        print(f"Fetched {len(items)} events, {new_count} new | Total unique: {len(all_data)}")
+        print(f"Page {page}: Fetched {len(items)} events, {new_count} new | Total unique: {len(all_data)}")
         
-        if new_count == 0:
+        if new_count == 0 or len(items) < limit:
             break
         
-        start += limit
+        page += 1
         time.sleep(0.5)
     
     print(f"Total events: {len(all_data)}")
