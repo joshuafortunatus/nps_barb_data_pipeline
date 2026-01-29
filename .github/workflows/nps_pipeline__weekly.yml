@@ -1,0 +1,33 @@
+name: NPS Weekly Data Fetch
+
+on:
+  schedule:
+    - cron: '0 8 * * 0'  # Sundays at 6am UTC
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests google-cloud-bigquery
+
+      - name: Run weekly NPS data fetch
+        env:
+          NPS_KEY: ${{ secrets.NPS_KEY }}
+          PROJECT_ID: ${{ secrets.PROJECT_ID }}
+          DATASET_ID: ${{ secrets.DATASET_ID }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GET_NATIONAL_PARKS_QUERY: ${{ secrets.GET_NATIONAL_PARKS_QUERY }}
+        run: python nps_fetch_weekly.py

@@ -2,7 +2,7 @@ import requests
 import json
 import os
 import time
-from datetime import datetime, date
+from datetime import datetime
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
@@ -12,16 +12,14 @@ PROJECT_ID = os.environ['PROJECT_ID']
 DATASET_ID = os.environ['DATASET_ID']
 BASE_URL = "https://developer.nps.gov/api/v1"
 
-# Expected minimum counts (80% threshold for safety)
+# Expected minimum counts (80% threshold for safety) - WEEKLY/STATIC endpoints
 EXPECTED_COUNTS = {
     'nps__src_parks': 474,
     'nps__src_amenities': 127,
     'nps__src_amenities_parks': 127,
     'nps__src_tours': 706,
     'nps__src_things_to_do': 3579,
-    'nps__src_events': 10,  # Lower threshold since events fluctuate
     'nps__src_places': 5378,
-    'nps__src_alerts': 100,  # Alerts fluctuate
     'nps__src_campgrounds': 664,
     'nps__src_park_boundaries': 62,
 }
@@ -39,25 +37,23 @@ def get_national_park_codes():
     print(f"Loaded {len(park_codes)} national park codes from BigQuery")
     return park_codes
 
-# Define endpoints - table names follow pattern: nps_src_{key}
+# Static endpoints - updated weekly
 ENDPOINTS = {
     'parks': '/parks',
     'amenities': '/amenities',
     'amenities_parks': '/amenities/parksplaces',
     'tours': '/tours',
     'thingstodo': '/thingstodo',
-    'events': '/events',
     'places': '/places',
-    'alerts': '/alerts',
     'campgrounds': '/campgrounds',
 }
 
-# Endpoints that require individual park code calls
+# Park-specific endpoints
 PARK_SPECIFIC_ENDPOINTS = {
     'park_boundaries': '/mapdata/parkboundaries/{parkCode}'
 }
 
-# Special case mappings for table names that don't follow the pattern
+# Table name overrides
 TABLE_NAME_OVERRIDES = {
     'thingstodo': 'nps__src_things_to_do',
 }
@@ -74,7 +70,6 @@ def fetch_with_retry(url, headers, max_retries=3, timeout=60):
         try:
             response = requests.get(url, headers=headers, timeout=timeout)
             
-            # Handle rate limiting separately
             if response.status_code == 429:
                 wait = 60
                 print(f"  Rate limited (429). Waiting {wait}s...")
@@ -102,18 +97,14 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
     print(f"\n=== Fetching {endpoint_name} ===")
     
     all_data = []
-    seen_ids = set()
     start = 0
     limit = 50
     
-    today = date.today().isoformat()
     park_codes_param = ','.join(park_codes)
     headers = {"X-Api-Key": NPS_KEY}
     
     while True:
-        if endpoint_name == 'events':
-            url = f"{BASE_URL}{endpoint_path}?parkCode={park_codes_param}&dateEnd={today}&start={start}&limit={limit}"
-        elif endpoint_name == 'places':
+        if endpoint_name == 'places':
             url = f"{BASE_URL}{endpoint_path}?parkCode={park_codes_param}&start={start}&limit={limit}"
         else:
             url = f"{BASE_URL}{endpoint_path}?start={start}&limit={limit}"
@@ -129,22 +120,8 @@ def fetch_endpoint_data(endpoint_name, endpoint_path, park_codes):
         if not items:
             break
         
-        if endpoint_name == 'events':
-            new_count = 0
-            for item in items:
-                event_id = item.get('id')
-                if event_id not in seen_ids:
-                    seen_ids.add(event_id)
-                    all_data.append(item)
-                    new_count += 1
-            
-            print(f"Fetched {len(items)} events, {new_count} new | Total unique: {len(all_data)}")
-            
-            if new_count == 0:
-                break
-        else:
-            all_data.extend(items)
-            print(f"Fetched {len(all_data)} {endpoint_name} so far...")
+        all_data.extend(items)
+        print(f"Fetched {len(all_data)} {endpoint_name} so far...")
         
         start += limit
         time.sleep(0.5)
@@ -190,7 +167,6 @@ def load_to_bigquery(data, table_name):
         print(f"No data to load for {table_name}, keeping existing data")
         return
     
-    # Safety check - don't overwrite if we got way less than expected
     expected = EXPECTED_COUNTS.get(table_name)
     if expected and len(data) < expected * 0.8:
         print(f"WARNING: Only got {len(data)} {table_name}, expected ~{expected}. Skipping write to preserve existing data.")
@@ -238,8 +214,8 @@ def load_to_bigquery(data, table_name):
     print(f"Loaded {len(processed_data)} rows to {table_id}")
 
 def main():
-    """Main execution function"""
-    print("Starting NPS data fetch...")
+    """Main execution function - WEEKLY static data"""
+    print("Starting NPS WEEKLY data fetch (static endpoints)...")
     print(f"Target: {PROJECT_ID}.{DATASET_ID}")
     
     park_codes = get_national_park_codes()
@@ -254,7 +230,7 @@ def main():
         table_name = get_table_name(endpoint_name)
         load_to_bigquery(data, table_name)
     
-    print("\n=== Data fetch complete ===")
+    print("\n=== WEEKLY data fetch complete ===")
 
 if __name__ == "__main__":
     main()
