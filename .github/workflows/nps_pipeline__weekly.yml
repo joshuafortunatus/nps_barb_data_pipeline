@@ -30,4 +30,4 @@ jobs:
           DATASET_ID: ${{ secrets.DATASET_ID }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           GET_NATIONAL_PARKS_QUERY: ${{ secrets.GET_NATIONAL_PARKS_QUERY }}
-        run: python fetch_nps_data__weekly.py
+        run: python scripts/fetch_nps_data__weekly.py
