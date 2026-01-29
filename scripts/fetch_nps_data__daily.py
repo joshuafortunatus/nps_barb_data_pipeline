@@ -73,7 +73,7 @@ def fetch_events(park_codes):
     headers = {"X-Api-Key": NPS_KEY}
     
     while True:
-        url = f"{BASE_URL}/events?parkCode={park_codes_param}&dateEnd={today}&start={start}&limit={limit}"
+        url = f"{BASE_URL}/events?parkCode={park_codes_param}&dateStart={today}&start={start}&limit={limit}"
         
         data = fetch_with_retry(url, headers)
         
@@ -97,7 +97,7 @@ def fetch_events(park_codes):
         print(f"Fetched {len(items)} events, {new_count} new | Total unique: {len(all_data)}")
         
         # Keep paginating until we get fewer than limit (last page)
-        if len(items) < limit:
+        if new_count == 0:
             break
         
         start += limit
