@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests google-cloud-bigquery anthropic pandas
+          pip install requests google-cloud-bigquery anthropic pandas db-dtypes
 
       - name: Run weekly NPS data fetch
         env:
