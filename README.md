@@ -6,7 +6,7 @@ Automated data collection from the National Parks Service API and Recreation.gov
 
 * 🌲 Fetches parks, activities, events, amenities, and campgrounds from NPS API
 * 🏕️ Fetches campsite data with coordinates from Recreation.gov API (Voyageurs National Park)
-* 🤖 Rates hiking difficulty using Claude AI
+* 🤖 Rates hiking difficulty (Easy/Moderate/Strenuous) using TypeSafe's Jev decision model
 * ☁️ Loads everything to BigQuery
 * ⏰ Runs automatically every day at 8am UTC via GitHub Actions
 
@@ -14,7 +14,7 @@ Automated data collection from the National Parks Service API and Recreation.gov
 ```
 NPS API → fetch_nps_data.py → BigQuery (nps__src_* tables)
 Recreation.gov API → fetch_recreation_gov_data.py → BigQuery (recreation_gov__src_campsites)
-BigQuery → rate_hikes.py (Claude AI) → BigQuery (nps__src_activity_difficulty_ratings)
+BigQuery → rate_hikes.py (Jev) → BigQuery (nps__src_activity_difficulty_ratings)
 ```
 
 ## Setup
@@ -35,7 +35,10 @@ GET_NATIONAL_PARKS_QUERY=SELECT park_code FROM your_table
 # Recreation.gov API
 RECREATION_GOV_API_KEY=your-recreation-gov-api-key
 
-# Anthropic Claude API
+# TypeSafe Jev (hike difficulty ratings)
+TYPESAFE_API_KEY=your-typesafe-api-key
+
+# Anthropic Claude API (hike length categorization)
 ANTHROPIC_API_KEY=your-anthropic-api-key
 CLAUDE_MODEL=claude-sonnet-4-20250514
 
@@ -51,7 +54,8 @@ Add these secrets to your GitHub repository:
 
 * `NPS_KEY` - Your NPS API key ([get one here](https://www.nps.gov/subjects/developer/get-started.htm))
 * `RECREATION_GOV_API_KEY` - Your Recreation.gov API key ([get one here](https://ridb.recreation.gov/))
-* `ANTHROPIC_API_KEY` - Your Claude API key ([get one here](https://console.anthropic.com/))
+* `TYPESAFE_API_KEY` - Your TypeSafe key for Jev difficulty ratings ([get one here](https://console.typesafe.ai/))
+* `ANTHROPIC_API_KEY` - Your Claude API key, used for hike length categorization ([get one here](https://console.anthropic.com/))
 * `PROJECT_ID` - GCP project ID
 * `DATASET_ID` - BigQuery dataset name
 * `GOOGLE_CREDENTIALS_JSON` - GCP service account JSON (full JSON string)
@@ -92,7 +96,7 @@ python scripts/rate_hikes.py
 * `recreation_gov__src_campsites` - Voyageurs NP campsites with lat/long coordinates
 
 ### AI-Generated Data (from rate_hikes.py)
-* `nps__src_activity_difficulty_ratings` ⭐ - AI-powered hiking difficulty ratings
+* `nps__src_activity_difficulty_ratings` ⭐ - Hiking difficulty ratings (Easy/Moderate/Strenuous) with model confidence
 
 ## Pipeline Schedule
 
@@ -117,11 +121,11 @@ BARB is a comprehensive National Parks data visualization project that reimagine
 ## Tech Stack
 
 * **Data Sources**: NPS API, Recreation.gov RIDB API
-* **AI**: Anthropic Claude (Sonnet 4)
+* **AI**: TypeSafe Jev (difficulty classification), Anthropic Claude (length categorization)
 * **Cloud**: Google Cloud Platform, BigQuery
 * **Orchestration**: GitHub Actions
 * **Languages**: Python 3.11+
-* **Key Libraries**: `requests`, `google-cloud-bigquery`, `anthropic`
+* **Key Libraries**: `requests`, `google-cloud-bigquery`, `anthropic`, `pandas`
 
 ## License
 
