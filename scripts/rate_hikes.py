@@ -25,7 +25,7 @@ JEV_API_KEY = os.environ.get("TYPESAFE_API_KEY")
 
 PROJECT_ID = os.environ["PROJECT_ID"]
 DATASET_ID = os.environ["DATASET_ID"]
-RATINGS_TABLE = f"{PROJECT_ID}.{DATASET_ID}.nps__mart_activity_difficulty_ratings"
+RATINGS_TABLE = f"{PROJECT_ID}.{DATASET_ID}.nps__src_activity_difficulty_ratings"
 HIKES_TABLE = f"{PROJECT_ID}.{DATASET_ID}.nps__int_activity_hikes"
 
 QUESTIONS = {
