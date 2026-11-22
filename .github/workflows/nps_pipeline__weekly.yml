@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 8 * * 0'  # Sundays at 8am UTC
   workflow_dispatch:
+    inputs:
+      rate_hikes_args:
+        description: 'Extra args for rate_hikes.py (e.g. "--limit 2 --dry-run")'
+        required: false
+        default: ''
 
 jobs:
   fetch:
@@ -56,7 +61,8 @@ jobs:
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
           DATASET_ID: ${{ secrets.DATASET_ID }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-        run: python scripts/rate_hikes.py
+          RATE_HIKES_ARGS: ${{ inputs.rate_hikes_args }}
+        run: python scripts/rate_hikes.py $RATE_HIKES_ARGS
 
   categorize-lengths:
     runs-on: ubuntu-latest
