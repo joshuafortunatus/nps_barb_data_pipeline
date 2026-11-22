@@ -1,8 +1,7 @@
 """Rate hike difficulty and attributes using TypeSafe's Jev decision model.
 
 One Jev request per hike returns a typed difficulty label (constrained to the
-criteria keys, so it cannot drift), a confidence value, and two boolean-ish
-attributes used for filtering in the explorer.
+criteria keys, so it cannot drift) plus the model's confidence in it.
 
 Usage:
     python scripts/rate_hikes.py                      # rate unrated hikes only
@@ -42,28 +41,10 @@ QUESTIONS = {
                          "or all-day effort; needs good fitness.",
         },
     },
-    "sustained_climb": {
-        "type": "noul",
-        "instructions": "Does this hike involve a sustained uphill climb?",
-        "criteria": {
-            "true": "Significant continuous elevation gain.",
-            "false": "Flat, gently rolling, or only brief rises.",
-        },
-    },
-    "kid_friendly": {
-        "type": "noul",
-        "instructions": "Could a typical 7-year-old complete this comfortably?",
-        "criteria": {
-            "true": "Short, safe footing, no exposure.",
-            "false": "Too long, too steep, or unsafe for young children.",
-        },
-    },
 }
 
 NEW_COLUMNS = [
     ("rating_confidence", "FLOAT64"),
-    ("sustained_climb", "FLOAT64"),
-    ("kid_friendly", "FLOAT64"),
 ]
 
 
@@ -164,17 +145,14 @@ def merge_ratings(bq, ratings_df):
     WHEN MATCHED THEN UPDATE SET
         difficulty_rating = source.difficulty_rating,
         rating_confidence = source.rating_confidence,
-        sustained_climb   = source.sustained_climb,
-        kid_friendly      = source.kid_friendly,
         rated_at          = source.rated_at,
         rating_source     = source.rating_source
     WHEN NOT MATCHED THEN INSERT (
-        activity_id, difficulty_rating, rating_confidence, sustained_climb,
-        kid_friendly, rated_at, rating_source
+        activity_id, difficulty_rating, rating_confidence, rated_at,
+        rating_source
     ) VALUES (
         source.activity_id, source.difficulty_rating, source.rating_confidence,
-        source.sustained_climb, source.kid_friendly, source.rated_at,
-        source.rating_source
+        source.rated_at, source.rating_source
     )
     """).result()
 
@@ -221,8 +199,6 @@ def main():
             "activity_id": hike["hike_id"],
             "difficulty_rating": difficulty["choice"],
             "rating_confidence": difficulty.get("confidence"),
-            "sustained_climb": answers["sustained_climb"]["noul"],
-            "kid_friendly": answers["kid_friendly"]["noul"],
             "rated_at": datetime.now(timezone.utc),
             "rating_source": "jev",
         })
